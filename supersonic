@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+#
+#   ________  ____  ____    _______    _______   _______    ________   ______    _____  ___    __     ______   
+#  /"       )("  _||_ " |  |   __ "\  /"     "| /"      \  /"       ) /    " \  (\"   \|"  \  |" \   /" _  "\  
+# (:   \___/ |   (  ) : |  (. |__) :)(: ______)|:        |(:   \___/ // ____  \ |.\\   \    | ||  | (: ( \___) 
+#  \___  \   (:  |  | . )  |:  ____/  \/    |  |_____/   ) \___  \  /  /    ) :)|: \.   \\  | |:  |  \/ \      
+#   __/  \\   \\ \__/ //   (|  /      // ___)_  //      /   __/  \\(: (____/ // |.  \    \. | |.  |  //  \ _   
+#  /" \   :)  /\\ __ //\  /|__/ \    (:      "||:  __   \  /" \   :)\        /  |    \    \ | /\  |\(:   _) \  
+# (_______/  (__________)(_______)    \_______)|__|  \___)(_______/  \"_____/    \___|\____\)(__\_|_)\_______) 
+#
+
+set -o errexit   # abort on nonzero exitstatus
+set -o pipefail  # don't hide errors within pipes
+
+CLIENT=/opt/cisco/anyconnect/bin/vpn
+OATHTOOL=$(brew --prefix oath-toolkit)
+VIPACCESS=~/.vipaccess
+
+die() {
+  [ -z "$*" ] || echo "$@"
+  exit 1
+}
+
+depends() {
+  for path in "$@"
+  do
+    [ -e "${path}" ] || die "Missing dependency file: ${path}"
+  done
+}
+
+notify() {
+  osascript -e "display notification \"$*\" with title \"Supersonic\""
+}
+
+die-if-already-running() {
+  if pgrep -af supersonic | grep -qv $$
+  then
+    die "Error: found another instance of supersonic running"
+  fi
+}
+
+usage() {
+  echo "supersonic [-h] connect | disconnect | status | vipcode"
+  echo ""
+  echo "SUBCOMMANDS"
+  echo ""
+  echo "  connect -u <username> -p <password> HOST"
+  echo "  Connects to HOST using the given username and password."
+  echo ""
+  echo "  disconnect"
+  echo "  Disconnects from the VPN. Does nothing if you are not connected."
+  echo ""
+  echo "  status"
+  echo "  Shows the current connection status."
+  echo ""
+  echo "  vipcode"
+  echo "  Shows the current VIP code."
+  echo ""
+  echo "OPTIONS"
+  echo ""
+  echo "  -h"
+  echo "  Shows this help message."
+  echo ""
+  echo "EXAMPLES"
+  echo ""
+  echo "  Connect to the VPN:"
+  echo "  $ supersonic -u johndoe -p secret connect vpn.example.com"
+  echo ""
+}
+
+client() {
+  ${CLIENT} "$@"
+}
+
+vipcode() {
+  local token
+  token="$(head -2 $VIPACCESS | tail -1 | cut -w -f 2)"
+  ${OATHTOOL} -b --totp "$token"
+}
+
+connected() {
+  client status | grep -q '>> state: Connected'
+}
+
+disconnected() {
+  client status | grep -q '>> state: Disconnected'
+}
+
+status() {
+  if connected
+  then
+    notify "You are connected ✅"
+  else
+    notify "You are disconnected ❌"
+  fi
+}
+
+connect() {
+  local username="$1"
+  local password="$2"
+  local host="$3"
+
+  local code
+  code=$(vipcode)
+
+  die-if-already-running
+
+  if connected
+  then
+    die "You are already connected."
+  else
+    notify "Connecting to $host... ⏳"
+  fi
+
+  start=$(date +%s)
+
+  client -s <<EOF
+connect "${host}"
+6
+${username}
+${password}
+${code}
+y
+exit
+EOF
+
+  end=$(date +%s)
+  runtime=$((end-start))
+
+  notify "Connected 🎉 ($runtime s)"
+}
+
+disconnect() {
+  die-if-already-running
+
+  if disconnected
+  then
+    notify "You are already disconnected ℹ️"
+  else
+    client disconnect
+    notify "Disconnected!"
+  fi
+}
+
+check-dependencies() {
+  depends "${CLIENT}" "${OATHTOOL}" "${VIPACCESS}"
+}
+
+main() {
+  while getopts "u:p:h" opt
+  do
+    case "${opt}" in
+      "u") USERNAME="${OPTARG}" ;;
+      "p") PASSWORD="${OPTARG}" ;;
+      "h") usage; exit 0 ;;
+      *) die "Option ${OPTARG} not implemented or undefined" ;;
+    esac
+  done
+  shift $((OPTIND-1))
+
+  command="$1"
+
+  if ! [[ "$command" =~ ^(connect|disconnect|status|vipcode)$ ]]
+  then
+    usage
+    die "Error: unknown command '${command}'"
+  fi
+
+  check-dependencies
+
+  case "$command" in
+    "connect")
+      HOST="$2"
+
+      [[ -z "$USERNAME" ]] && die "Error: provide username with -u USERNAME"
+      [[ -z "$PASSWORD" ]] && die "Error: provide password with -p PASSWORD"
+      [[ -z "$HOST" ]]     && die "Error: provide HOST as a second argument"
+
+      connect "$USERNAME" "$PASSWORD" "$HOST"
+      ;;
+
+    "disconnect") disconnect ;;
+    "vipcode") vipcode ;;
+    "status") status ;;
+
+    *) die "Error: unknown command '${command}'" ;;
+  esac
+}
+
+main "$@"
