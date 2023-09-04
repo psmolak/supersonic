@@ -21,3 +21,5 @@ jobs:
 
       - name: ShellCheck
         uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          additional_files: supersonic
