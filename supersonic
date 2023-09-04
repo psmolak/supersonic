@@ -40,7 +40,7 @@ die-if-already-running() {
 }
 
 usage() {
-  echo "supersonic [-h] connect | disconnect | status | vipcode"
+  echo "supersonic [-h|--help] connect | disconnect | status | vipcode"
   echo ""
   echo "SUBCOMMANDS"
   echo ""
@@ -58,7 +58,7 @@ usage() {
   echo ""
   echo "OPTIONS"
   echo ""
-  echo "  -h"
+  echo "  -h|--help"
   echo "  Shows this help message."
   echo ""
   echo "EXAMPLES"
@@ -147,6 +147,8 @@ check-dependencies() {
 }
 
 main() {
+  [[ "$1" == "--help" ]] && usage && exit 0
+
   while getopts "u:p:h" opt
   do
     case "${opt}" in
