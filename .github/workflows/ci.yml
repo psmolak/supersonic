@@ -23,3 +23,5 @@ jobs:
         uses: ludeeus/action-shellcheck@2.0.0
         with:
           additional_files: supersonic
+          severity: warning
+          format: tty
