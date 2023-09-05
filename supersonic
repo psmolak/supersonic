@@ -13,7 +13,7 @@ set -o errexit   # abort on nonzero exitstatus
 set -o pipefail  # don't hide errors within pipes
 
 CLIENT=/opt/cisco/anyconnect/bin/vpn
-OATHTOOL=$(brew --prefix oath-toolkit)
+OATHTOOL=$(which oathtool)
 VIPACCESS=~/.vipaccess
 
 die() {
